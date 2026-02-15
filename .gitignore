@@ -49,3 +49,4 @@ replay_pid*
 *.tmp
 *.swp
 *.swo
+/.idea/
