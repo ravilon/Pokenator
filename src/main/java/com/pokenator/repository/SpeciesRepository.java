@@ -29,12 +29,11 @@ public class SpeciesRepository {
 
     public long countSpecies(Dataset dataset) {
 
-        StringBuilder sb = new StringBuilder();
-        sb.append(Prefixes.prefix("pokemon", PokemonKgConfig.POKEMON_NS));
-        sb.append("SELECT (COUNT(DISTINCT ?s) AS ?total)\n");
-        sb.append("WHERE { GRAPH ?g { ?s a pokemon:Species . } }");
+        String sb = Prefixes.prefix("pokemon", PokemonKgConfig.POKEMON_NS) +
+                "SELECT (COUNT(DISTINCT ?s) AS ?total)\n" +
+                "WHERE { GRAPH ?g { ?s a pokemon:Species . } }";
 
-        QuerySolution row = sparql.selectOne(dataset, sb.toString());
+        QuerySolution row = sparql.selectOne(dataset, sb);
         if (row == null) return 0;
 
         return row.getLiteral("total").getLong();
@@ -42,21 +41,20 @@ public class SpeciesRepository {
 
     public String discoverPredicateToGeneration(Dataset dataset) {
 
-        StringBuilder sb = new StringBuilder();
-        sb.append(Prefixes.prefix("pokemon", PokemonKgConfig.POKEMON_NS));
-        sb.append("SELECT ?p (COUNT(DISTINCT ?s) AS ?n)\n");
-        sb.append("WHERE {\n");
-        sb.append("  GRAPH ?g {\n");
-        sb.append("    ?s a pokemon:Species .\n");
-        sb.append("    ?s ?p ?gen .\n");
-        sb.append("    ?gen a pokemon:Generation .\n");
-        sb.append("  }\n");
-        sb.append("}\n");
-        sb.append("GROUP BY ?p\n");
-        sb.append("ORDER BY DESC(?n)\n");
-        sb.append("LIMIT 1\n");
+        String sb = Prefixes.prefix("pokemon", PokemonKgConfig.POKEMON_NS) +
+                "SELECT ?p (COUNT(DISTINCT ?s) AS ?n)\n" +
+                "WHERE {\n" +
+                "  GRAPH ?g {\n" +
+                "    ?s a pokemon:Species .\n" +
+                "    ?s ?p ?gen .\n" +
+                "    ?gen a pokemon:Generation .\n" +
+                "  }\n" +
+                "}\n" +
+                "GROUP BY ?p\n" +
+                "ORDER BY DESC(?n)\n" +
+                "LIMIT 1\n";
 
-        QuerySolution row = sparql.selectOne(dataset, sb.toString());
+        QuerySolution row = sparql.selectOne(dataset, sb);
         if (row == null || !row.contains("p")) return null;
         return row.getResource("p").getURI();
     }
@@ -100,13 +98,12 @@ public class SpeciesRepository {
 
     public List<String> listSpecies(Dataset dataset, int limit) {
 
-        StringBuilder sb = new StringBuilder();
-        sb.append(Prefixes.prefix("pokemon", PokemonKgConfig.POKEMON_NS));
-        sb.append("SELECT DISTINCT ?s\n");
-        sb.append("WHERE { GRAPH ?g { ?s a pokemon:Species . } }\n");
-        sb.append("LIMIT ").append(limit);
+        String sb = Prefixes.prefix("pokemon", PokemonKgConfig.POKEMON_NS) +
+                "SELECT DISTINCT ?s\n" +
+                "WHERE { GRAPH ?g { ?s a pokemon:Species . } }\n" +
+                "LIMIT " + limit;
 
-        List<QuerySolution> rows = sparql.select(dataset, sb.toString());
+        List<QuerySolution> rows = sparql.select(dataset, sb);
 
         List<String> out = new ArrayList<>();
         for (QuerySolution r : rows) {
@@ -124,20 +121,19 @@ public class SpeciesRepository {
 
     public List<PredicateCount> topPredicatesForSpecies(Dataset dataset, int limit) {
 
-        StringBuilder sb = new StringBuilder();
-        sb.append(Prefixes.prefix("pokemon", PokemonKgConfig.POKEMON_NS));
-        sb.append("SELECT ?p (COUNT(*) AS ?n)\n");
-        sb.append("WHERE {\n");
-        sb.append("  GRAPH ?g {\n");
-        sb.append("    ?s a pokemon:Species .\n");
-        sb.append("    ?s ?p ?o .\n");
-        sb.append("  }\n");
-        sb.append("}\n");
-        sb.append("GROUP BY ?p\n");
-        sb.append("ORDER BY DESC(?n)\n");
-        sb.append("LIMIT ").append(limit);
+        String sb = Prefixes.prefix("pokemon", PokemonKgConfig.POKEMON_NS) +
+                "SELECT ?p (COUNT(*) AS ?n)\n" +
+                "WHERE {\n" +
+                "  GRAPH ?g {\n" +
+                "    ?s a pokemon:Species .\n" +
+                "    ?s ?p ?o .\n" +
+                "  }\n" +
+                "}\n" +
+                "GROUP BY ?p\n" +
+                "ORDER BY DESC(?n)\n" +
+                "LIMIT " + limit;
 
-        List<QuerySolution> rows = sparql.select(dataset, sb.toString());
+        List<QuerySolution> rows = sparql.select(dataset, sb);
 
         List<PredicateCount> out = new ArrayList<>();
         for (QuerySolution r : rows) {
@@ -225,7 +221,7 @@ public class SpeciesRepository {
 
         if (rows.isEmpty()) return Optional.empty();
 
-        RDFNode node = rows.get(0).get("s");
+        RDFNode node = rows.getFirst().get("s");
         if (node != null && node.isResource()) {
             return Optional.of(node.asResource().getURI());
         }
@@ -239,17 +235,16 @@ public class SpeciesRepository {
 
     public String getEnglishLabel(Dataset dataset, String uri) {
 
-        StringBuilder sb = new StringBuilder();
-        sb.append(Prefixes.prefix("rdfs", "http://www.w3.org/2000/01/rdf-schema#"));
-        sb.append("SELECT ?label WHERE {\n");
-        sb.append("  GRAPH ?g {\n");
-        sb.append("    <").append(uri).append("> rdfs:label ?label .\n");
-        sb.append("    FILTER(lang(?label) = \"en\" || lang(?label) = \"\")\n");
-        sb.append("  }\n");
-        sb.append("}\n");
-        sb.append("LIMIT 1");
+        String sb = Prefixes.prefix("rdfs", "http://www.w3.org/2000/01/rdf-schema#") +
+                "SELECT ?label WHERE {\n" +
+                "  GRAPH ?g {\n" +
+                "    <" + uri + "> rdfs:label ?label .\n" +
+                "    FILTER(lang(?label) = \"en\" || lang(?label) = \"\")\n" +
+                "  }\n" +
+                "}\n" +
+                "LIMIT 1";
 
-        QuerySolution row = sparql.selectOne(dataset, sb.toString());
+        QuerySolution row = sparql.selectOne(dataset, sb);
 
         if (row != null && row.contains("label")) {
             return row.getLiteral("label").getString();
@@ -304,6 +299,10 @@ public class SpeciesRepository {
                     sb.append("    ?s <").append(c.predicateUri()).append("> <")
                             .append(c.objectUri()).append("> .\n");
                 }
+            }
+
+            if (c.answer() == Answer.UNKNOWN) {
+                continue;
             }
 
             if (c.answer() == Answer.NO) {

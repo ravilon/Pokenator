@@ -45,10 +45,13 @@ public class App {
         Scanner sc = new Scanner(System.in);
 
         while (true) {
-            System.out.print("Answer (y/n): ");
+            System.out.print("Answer (y/n/?): ");
             String in = sc.nextLine().trim().toLowerCase();
 
-            Answer ans = in.startsWith("y") ? Answer.YES : Answer.NO;
+            Answer ans;
+            if (in.startsWith("y")) ans = Answer.YES;
+            else if (in.startsWith("n")) ans = Answer.NO;
+            else ans = Answer.UNKNOWN;
 
             var step = game.answer(sessionId, ans);
 

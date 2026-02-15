@@ -72,7 +72,9 @@ public class GameService {
         }
 
         // 3) Normal HAS_VALUE flow: add constraint from last question
-        state.addConstraint(new Constraint(last.predicateUri(), last.objectUri(), answer));
+        if (answer != Answer.UNKNOWN) {
+            state.addConstraint(new Constraint(last.predicateUri(), last.objectUri(), answer));
+        }
 
         long remaining = speciesRepo.countCandidates(dataset, state.getConstraints());
 
@@ -146,7 +148,7 @@ public class GameService {
             );
         }
 
-        String guessUri = candidates.get(0);
+        String guessUri = candidates.getFirst();
         String label = speciesRepo.getEnglishLabel(dataset, guessUri);
 
         return new Question(

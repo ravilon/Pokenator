@@ -50,7 +50,6 @@ public class QuestionSelector {
                 new Family(HAS_TYPE,     "type"),
                 new Family(HAS_COLOUR,   "color"),
                 new Family(HAS_SHAPE,    "shape"),
-                new Family(IN_EGG_GROUP, "egg group"),
                 new Family(FOUND_IN,     "habitat")
         );
 
