@@ -34,7 +34,6 @@ html, body{
   padding:0;
   height:100%;
   background:
-    /* Pokébola vibe (top red / middle black band / bottom white) */
     linear-gradient(
       180deg,
       var(--poke-red) 0%,
@@ -46,6 +45,7 @@ html, body{
     );
   color: var(--screen-ink);
   font-family: var(--font-ui);
+  overflow-x: hidden;
 }
 
 /* subtle scanlines (Game Boy feel) */
@@ -80,12 +80,29 @@ body::after{
 
 a{ color:inherit; }
 
+img{
+  max-width: 100%;
+  height: auto;
+  display:block;
+}
+
+.bigQ,
+.subtitle,
+.small,
+.badge,
+code{
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
 code{
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
   padding: 2px 6px;
   border-radius: 10px;
   background: rgba(0,0,0,0.06);
   border: 2px solid rgba(0,0,0,0.12);
+  max-width: 100%;
+  display: inline-block;
 }
 
 /* Pixel-ish button */
@@ -124,25 +141,11 @@ button:disabled{
   box-shadow: 4px 4px 0 rgba(0,0,0,0.55);
 }
 
-.btn-yes{
-  background: #b9ffcb;
-}
-
-.btn-no{
-  background: #ffc1bd;
-}
-
-.btn-unk{
-  background: #ffe7b3;
-}
-
-.btn-primary{
-  background: #cfe3ff;
-}
-
-.btn-ghost{
-  background: #f1f1f1;
-}
+.btn-yes{ background: #b9ffcb; }
+.btn-no{ background: #ffc1bd; }
+.btn-unk{ background: #ffe7b3; }
+.btn-primary{ background: #cfe3ff; }
+.btn-ghost{ background: #f1f1f1; }
 
 /* Game Boy dialog card */
 .card{
@@ -151,17 +154,19 @@ button:disabled{
   border-radius: var(--radius);
   box-shadow: var(--shadow-hard), var(--shadow-soft);
   padding: 18px;
+  max-width: 100%;
 }
 
-/* “PokéStop / menu box” vibe: inner dotted border */
+/* inner dotted border */
 .cardInner{
   border: 3px dashed rgba(0,0,0,0.35);
   border-radius: 12px;
   padding: 14px;
   background: rgba(255,255,255,0.65);
+  max-width: 100%;
 }
 
-/* Header bar resembling pokeball band */
+/* Header bar */
 .topBar{
   display:flex;
   align-items:flex-start;
@@ -173,6 +178,7 @@ button:disabled{
   border-radius: var(--radius);
   padding: 14px 16px;
   box-shadow: var(--shadow-hard);
+  flex-wrap: wrap;
 }
 
 .title{
@@ -207,9 +213,9 @@ button:disabled{
   font-family: var(--font-pixel);
   font-size: 10px;
   line-height: 1.1;
+  max-width: 100%;
 }
 
-/* big question text like GB dialog */
 .bigQ{
   font-family: var(--font-pixel);
   font-size: 14px;
@@ -227,11 +233,13 @@ button:disabled{
   gap: 12px;
   align-items:center;
   flex-wrap: wrap;
+  max-width: 100%;
 }
 
 .stack{
   display:grid;
   gap: 12px;
+  min-width: 0;
 }
 
 .hr{
@@ -239,6 +247,14 @@ button:disabled{
   background: rgba(0,0,0,0.10);
   border-radius: 99px;
   margin: 12px 0;
+}
+
+/* GUESS layout (novo) */
+.guessLayout{
+  display:flex;
+  gap: 16px;
+  align-items: flex-start;
+  flex-wrap: wrap;
 }
 
 /* Pixel frame for Pokemon art */
@@ -254,6 +270,8 @@ button:disabled{
   display:grid;
   place-items:center;
   overflow:hidden;
+  flex: 0 0 auto;
+  max-width: 100%;
 }
 
 .pokeFrame img{
@@ -271,9 +289,9 @@ button:disabled{
   background: rgba(255, 193, 189, 0.65);
   box-shadow: var(--shadow-hard);
   font-family: var(--font-ui);
+  max-width: 100%;
 }
 
-/* Arrow indicator like old menus */
 .arrow{
   font-family: var(--font-pixel);
   font-size: 12px;
@@ -285,4 +303,83 @@ button:disabled{
   max-width: 980px;
   margin: 28px auto;
   padding: 16px;
+  width: 100%;
+}
+
+/* =========================
+   MOBILE RESPONSIVE RULES
+   ========================= */
+@media (max-width: 560px){
+  .page{
+    margin: 12px auto;
+    padding: 12px;
+  }
+
+  .topBar{
+    padding: 12px 12px;
+    gap: 12px;
+  }
+
+  .title{ font-size: 16px; }
+  .subtitle{
+    font-size: 11px;
+    margin-top: 6px;
+  }
+
+  .card{ padding: 14px; }
+  .cardInner{ padding: 12px; }
+
+  .bigQ{
+    font-size: 12px;
+    line-height: 1.7;
+  }
+
+  /* ações (QUESTION e GUESS) viram coluna */
+  .actionsRow{
+    display: grid !important;
+    grid-template-columns: 1fr;
+    gap: 10px;
+    align-items: stretch;
+  }
+
+  button,
+  .btn-yes, .btn-no, .btn-unk, .btn-primary, .btn-ghost{
+    width: 100%;
+  }
+
+  /* GUESS vira coluna */
+  .guessLayout{
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .pokeFrame{
+    width: 100%;
+    height: auto;
+    aspect-ratio: 1 / 1;
+  }
+
+  .pokeFrame img{
+    width: 100%;
+    height: 100%;
+  }
+
+  .badge{ font-size: 9px; }
+}
+
+/* Tablet: um pouco menor */
+@media (min-width: 561px) and (max-width: 900px){
+  .page{
+    margin: 18px auto;
+    padding: 14px;
+  }
+
+  .pokeFrame{
+    width: 200px;
+    height: 200px;
+  }
+  .pokeFrame img{
+    width: 200px;
+    height: 200px;
+  }
 }

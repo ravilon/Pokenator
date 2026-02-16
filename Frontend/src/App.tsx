@@ -69,6 +69,13 @@ function extractGuessLabelFromText(text: string): string | null {
   return name.length ? name : null;
 }
 
+/** Normalize remainingCandidates from backend */
+function normalizeRemaining(value: any): number | null {
+  if (value === null || value === undefined) return null;
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  return null;
+}
+
 export default function App() {
   const [sessionId, setSessionId] = useState("");
   const [questionText, setQuestionText] = useState("Loading...");
@@ -107,10 +114,22 @@ export default function App() {
     }
   }
 
-  function setRemainingIfPresent(value: any) {
-    if (value !== null && value !== undefined && typeof value === "number" && Number.isFinite(value)) {
-      setRemaining(value);
-    }
+  function endNoMoreGuesses(remOverride?: number | null) {
+    setGuess(null);
+    setPoke(null);
+    lastGuessKeyRef.current = null;
+
+    setQuestionText("No candidates left 😅");
+    setRemaining(remOverride ?? 0);
+
+    setLock({
+      reason: "NO_MORE_GUESSES",
+      title: "OUT OF GUESSES 😅",
+      subtitle: "No candidates left. Click NEW GAME to restart.",
+    });
+
+    setConfetti(makeConfetti(85));
+    window.setTimeout(() => setConfetti([]), 1700);
   }
 
   async function init() {
@@ -137,43 +156,65 @@ export default function App() {
 
   useEffect(() => {
     init();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function applyGuess(nextGuess: UiGuess, remainingCandidates: any) {
+    const rem = normalizeRemaining(remainingCandidates);
+    if (rem !== null && rem <= 0) {
+      endNoMoreGuesses(0);
+      return;
+    }
+
+    // Compute key FIRST (before we wipe poke),
+    // so repeated guesses won't force a "Loading Pokémon..." state.
+    const key = `${(nextGuess.label || "").trim().toLowerCase()}|${(nextGuess.uri || "").trim().toLowerCase()}`;
+
     // Render guess mode immediately
     setGuess(nextGuess);
-    setPoke(null);
 
-    setRemainingIfPresent(remainingCandidates);
-
-    const key = `${(nextGuess.label || "").trim().toLowerCase()}|${(nextGuess.uri || "").trim().toLowerCase()}`;
+    // Repeated guess guard
     if (lastGuessKeyRef.current && key === lastGuessKeyRef.current) {
+      // IMPORTANT: do NOT force "loading" UI.
+      // Keep poke as-is (or null), but we will render a locked frame below.
       setLock({
         reason: "REPEATED_GUESS",
         title: "NO NEW GUESSES 😵",
         subtitle: "The backend repeated the same guess. Click NEW GAME to restart.",
       });
+      if (rem !== null) setRemaining(rem);
       setConfetti(makeConfetti(90));
       window.setTimeout(() => setConfetti([]), 1700);
       return;
     }
+
+    // New guess flow
     lastGuessKeyRef.current = key;
+    setLock(null); // unlock if we were locked from a previous state
+    setPoke(null); // now it's safe to clear (we will fetch)
+
+    if (rem !== null) setRemaining(rem);
 
     await loadPoke(nextGuess.label);
   }
 
   async function handleStep(step: StepResponse) {
-    // 1) Normal QUESTION
+    const rem = normalizeRemaining((step as any).remainingCandidates);
+
+    // 1) QUESTION
     if (step.kind === "QUESTION") {
-      // ✅ Special case: GUESS embedded in question payload
       const qAny = step.question as any;
       const embeddedKind = (qAny?.kind ?? "").toString().toUpperCase();
 
       if (embeddedKind === "GUESS") {
         const label = extractGuessLabelFromText(step.question.text) ?? "Unknown";
         const uri = (step.question as any)?.objectUri ?? null;
-
         await applyGuess({ label, uri }, (step as any).remainingCandidates);
+        return;
+      }
+
+      if (rem !== null && rem <= 0) {
+        endNoMoreGuesses(0);
         return;
       }
 
@@ -183,40 +224,25 @@ export default function App() {
       lastGuessKeyRef.current = null;
 
       setQuestionText(step.question.text);
-      setRemainingIfPresent((step as any).remainingCandidates);
+      if (rem !== null) setRemaining(rem);
       return;
     }
 
-    // 2) Normal GUESS
+    // 2) GUESS
     if (step.kind === "GUESS") {
       const label = (step as any).guessLabel;
       const uri = (step as any).guessUri ?? null;
-
       await applyGuess({ label, uri }, (step as any).remainingCandidates);
       return;
     }
 
     // 3) NO_CANDIDATES
-    setGuess(null);
-    setPoke(null);
-    setQuestionText("No candidates left 😅");
-
-    const rem = (step as any).remainingCandidates;
-    if (typeof rem === "number") setRemaining(rem);
-    else setRemaining(0);
-
-    setLock({
-      reason: "NO_MORE_GUESSES",
-      title: "OUT OF GUESSES 😅",
-      subtitle: "No candidates left. Click NEW GAME to restart.",
-    });
-    setConfetti(makeConfetti(85));
-    window.setTimeout(() => setConfetti([]), 1700);
+    endNoMoreGuesses(rem ?? 0);
   }
 
   async function onAnswer(answer: Answer) {
     if (!sessionId) return;
-    if (lock) return;
+    if (lock && lock.reason !== "REPEATED_GUESS") return; // allow NEW GAME only via UI
 
     setBusy(true);
     setErr("");
@@ -245,11 +271,13 @@ export default function App() {
   }
 
   async function onWrongTryNext() {
-    // Wrong => answer NO and let backend pick another candidate/flow
     await onAnswer("NO");
   }
 
   const showOnlyNewGame = lock !== null;
+
+  const showLockedFrameMessage =
+    lock?.reason === "REPEATED_GUESS" || lock?.reason === "NO_MORE_GUESSES";
 
   return (
     <div className="page">
@@ -322,7 +350,7 @@ export default function App() {
 
             <p className="bigQ">{questionText}</p>
 
-            <div className="row" style={{ marginTop: 16 }}>
+            <div className="row actionsRow" style={{ marginTop: 16 }}>
               <button className="btn-yes" disabled={busy || !!lock} onClick={() => onAnswer("YES")}>
                 YES
               </button>
@@ -358,12 +386,22 @@ export default function App() {
 
             <div className="hr" />
 
-            <div className="row" style={{ alignItems: "flex-start", gap: 16 }}>
+            <div className="guessLayout">
               <div className="pokeFrame">
-                {sprite ? <img src={sprite} alt={poke?.name ?? guess.label} /> : <div className="small">Loading Pokémon...</div>}
+                {sprite ? (
+                  <img src={sprite} alt={poke?.name ?? guess.label} />
+                ) : showLockedFrameMessage ? (
+                  <div className="small" style={{ textAlign: "center", padding: 12 }}>
+                    {lock?.reason === "REPEATED_GUESS"
+                      ? "No new guess 😵"
+                      : "No candidates 😅"}
+                  </div>
+                ) : (
+                  <div className="small">Loading Pokémon...</div>
+                )}
               </div>
 
-              <div className="stack" style={{ flex: 1 }}>
+              <div className="stack" style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ display: "grid", gap: 8 }}>
                   <div style={{ fontFamily: "var(--font-pixel)", fontSize: 16, lineHeight: 1.4 }}>
                     {guess.label.toUpperCase()}
@@ -399,10 +437,7 @@ export default function App() {
                       padding: 14,
                       borderRadius: 12,
                       border: "4px solid #111",
-                      background:
-                        lock.reason === "CORRECT"
-                          ? "rgba(185,255,203,0.85)"
-                          : "rgba(255,193,189,0.85)",
+                      background: lock.reason === "CORRECT" ? "rgba(185,255,203,0.85)" : "rgba(255,193,189,0.85)",
                       boxShadow: "6px 6px 0 rgba(0,0,0,0.65)",
                       fontFamily: "var(--font-pixel)",
                       fontSize: 12,
@@ -414,7 +449,7 @@ export default function App() {
                   </div>
                 )}
 
-                <div className="row" style={{ marginTop: 10 }}>
+                <div className="row actionsRow" style={{ marginTop: 10 }}>
                   {!showOnlyNewGame ? (
                     <>
                       <button className="btn-primary" disabled={busy} onClick={onCorrect}>
