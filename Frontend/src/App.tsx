@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { Answer, StartResponse, StepResponse } from "./api/backend";
 import { answerGame, startGame } from "./api/backend";
 import { fetchPokemon, toPokeApiSlug, type PokeApiPokemon } from "./api/pokeapi";
@@ -6,12 +6,72 @@ import { fetchPokemon, toPokeApiSlug, type PokeApiPokemon } from "./api/pokeapi"
 type UiGuess = {
   label: string;
   uri?: string | null;
-  confidence?: number;
 };
+
+type ConfettiPiece = {
+  id: string;
+  leftPct: number;
+  size: number;
+  durationMs: number;
+  delayMs: number;
+  rotateDeg: number;
+  driftPx: number;
+  hue: number;
+};
+
+function makeConfetti(count = 120): ConfettiPiece[] {
+  const out: ConfettiPiece[] = [];
+  for (let i = 0; i < count; i++) {
+    out.push({
+      id: `${Date.now()}-${i}-${Math.random().toString(16).slice(2)}`,
+      leftPct: Math.random() * 100,
+      size: 6 + Math.random() * 10,
+      durationMs: 900 + Math.random() * 1100,
+      delayMs: Math.random() * 220,
+      rotateDeg: Math.floor(Math.random() * 860),
+      driftPx: -90 + Math.random() * 180,
+      hue: Math.floor(Math.random() * 360),
+    });
+  }
+  return out;
+}
+
+type LockState =
+  | null
+  | {
+      reason: "CORRECT" | "NO_MORE_GUESSES" | "REPEATED_GUESS";
+      title: string;
+      subtitle: string;
+    };
+
+function PokeballMark() {
+  return (
+    <svg width="54" height="54" viewBox="0 0 64 64" aria-hidden="true">
+      <circle cx="32" cy="32" r="28" fill="#f7f7f7" stroke="#111" strokeWidth="4" />
+      <path d="M4 32a28 28 0 0 1 56 0H4z" fill="#e3352b" stroke="#111" strokeWidth="4" />
+      <rect x="4" y="28" width="56" height="8" fill="#111" />
+      <circle cx="32" cy="32" r="9" fill="#f7f7f7" stroke="#111" strokeWidth="4" />
+      <circle cx="32" cy="32" r="3" fill="#111" />
+    </svg>
+  );
+}
+
+/**
+ * Extracts pokemon label from texts like:
+ * "Is it Marshtomp?" -> "Marshtomp"
+ */
+function extractGuessLabelFromText(text: string): string | null {
+  if (!text) return null;
+  const t = text.trim().replace(/\s+/g, " ");
+  const m = t.match(/^is it\s+(.+?)\s*\?\s*$/i);
+  if (!m) return null;
+  const name = (m[1] || "").trim();
+  return name.length ? name : null;
+}
 
 export default function App() {
   const [sessionId, setSessionId] = useState("");
-  const [questionText, setQuestionText] = useState("Carregando...");
+  const [questionText, setQuestionText] = useState("Loading...");
   const [remaining, setRemaining] = useState<number | null>(null);
 
   const [guess, setGuess] = useState<UiGuess | null>(null);
@@ -20,20 +80,56 @@ export default function App() {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
 
+  const [lock, setLock] = useState<LockState>(null);
+  const [confetti, setConfetti] = useState<ConfettiPiece[]>([]);
+
+  const lastGuessKeyRef = useRef<string | null>(null);
+
+  const sprite = useMemo(() => {
+    return (
+      poke?.sprites.other?.["official-artwork"]?.front_default ??
+      poke?.sprites.front_default ??
+      null
+    );
+  }, [poke]);
+
+  async function loadPoke(label: string) {
+    const slug = toPokeApiSlug(label);
+    try {
+      const p = await fetchPokemon(slug);
+      setPoke(p);
+    } catch {
+      setPoke(null);
+      setErr(
+        `Guess "${label}" found, but PokeAPI lookup failed for "${slug}". ` +
+          `Tip: returning a PokeAPI-compatible name from the backend is the most reliable option.`
+      );
+    }
+  }
+
+  function setRemainingIfPresent(value: any) {
+    if (value !== null && value !== undefined && typeof value === "number" && Number.isFinite(value)) {
+      setRemaining(value);
+    }
+  }
+
   async function init() {
     setBusy(true);
     setErr("");
     setGuess(null);
     setPoke(null);
-    setRemaining(null);
-    setQuestionText("Carregando...");
+    setQuestionText("Loading...");
+    setLock(null);
+    setConfetti([]);
+    lastGuessKeyRef.current = null;
 
     try {
       const start: StartResponse = await startGame();
       setSessionId(start.sessionId);
       setQuestionText(start.question.text);
+      setRemaining(null);
     } catch (e: any) {
-      setErr(e?.message ?? "Falha ao iniciar");
+      setErr(e?.message ?? "Failed to start game");
     } finally {
       setBusy(false);
     }
@@ -43,190 +139,305 @@ export default function App() {
     init();
   }, []);
 
+  async function applyGuess(nextGuess: UiGuess, remainingCandidates: any) {
+    // Render guess mode immediately
+    setGuess(nextGuess);
+    setPoke(null);
+
+    setRemainingIfPresent(remainingCandidates);
+
+    const key = `${(nextGuess.label || "").trim().toLowerCase()}|${(nextGuess.uri || "").trim().toLowerCase()}`;
+    if (lastGuessKeyRef.current && key === lastGuessKeyRef.current) {
+      setLock({
+        reason: "REPEATED_GUESS",
+        title: "NO NEW GUESSES 😵",
+        subtitle: "The backend repeated the same guess. Click NEW GAME to restart.",
+      });
+      setConfetti(makeConfetti(90));
+      window.setTimeout(() => setConfetti([]), 1700);
+      return;
+    }
+    lastGuessKeyRef.current = key;
+
+    await loadPoke(nextGuess.label);
+  }
+
+  async function handleStep(step: StepResponse) {
+    // 1) Normal QUESTION
+    if (step.kind === "QUESTION") {
+      // ✅ Special case: GUESS embedded in question payload
+      const qAny = step.question as any;
+      const embeddedKind = (qAny?.kind ?? "").toString().toUpperCase();
+
+      if (embeddedKind === "GUESS") {
+        const label = extractGuessLabelFromText(step.question.text) ?? "Unknown";
+        const uri = (step.question as any)?.objectUri ?? null;
+
+        await applyGuess({ label, uri }, (step as any).remainingCandidates);
+        return;
+      }
+
+      // Normal question flow
+      setGuess(null);
+      setPoke(null);
+      lastGuessKeyRef.current = null;
+
+      setQuestionText(step.question.text);
+      setRemainingIfPresent((step as any).remainingCandidates);
+      return;
+    }
+
+    // 2) Normal GUESS
+    if (step.kind === "GUESS") {
+      const label = (step as any).guessLabel;
+      const uri = (step as any).guessUri ?? null;
+
+      await applyGuess({ label, uri }, (step as any).remainingCandidates);
+      return;
+    }
+
+    // 3) NO_CANDIDATES
+    setGuess(null);
+    setPoke(null);
+    setQuestionText("No candidates left 😅");
+
+    const rem = (step as any).remainingCandidates;
+    if (typeof rem === "number") setRemaining(rem);
+    else setRemaining(0);
+
+    setLock({
+      reason: "NO_MORE_GUESSES",
+      title: "OUT OF GUESSES 😅",
+      subtitle: "No candidates left. Click NEW GAME to restart.",
+    });
+    setConfetti(makeConfetti(85));
+    window.setTimeout(() => setConfetti([]), 1700);
+  }
+
   async function onAnswer(answer: Answer) {
     if (!sessionId) return;
+    if (lock) return;
 
     setBusy(true);
     setErr("");
 
     try {
-      const step: StepResponse = await answerGame(sessionId, answer);
-
-      if (step.kind === "QUESTION") {
-        setRemaining(step.remainingCandidates);
-        setQuestionText(step.question.text);
-        setGuess(null);
-        setPoke(null);
-        return;
-      }
-
-      if (step.kind === "GUESS") {
-        setRemaining(step.remainingCandidates);
-        setGuess({ label: step.guessLabel, uri: step.guessUri });
-
-        // tenta PokeAPI usando slug derivado do label
-        const slug = toPokeApiSlug(step.guessLabel);
-        try {
-          const p = await fetchPokemon(slug);
-          setPoke(p);
-        } catch (pokeErr: any) {
-          // não quebra o jogo se a PokeAPI não achar
-          setPoke(null);
-          setErr(
-            `Palpite: "${step.guessLabel}". Não consegui achar na PokeAPI via "${slug}". ` +
-              `Considere enviar também um pokeApiName no backend.`
-          );
-        }
-        return;
-      }
-
-      // NO_CANDIDATES
-      setRemaining(step.remainingCandidates ?? 0);
-      setQuestionText("Não encontrei candidatos 😅");
-      setGuess(null);
-      setPoke(null);
+      const step = await answerGame(sessionId, answer);
+      await handleStep(step);
     } catch (e: any) {
-      setErr(e?.message ?? "Erro ao responder");
+      setErr(e?.message ?? "Failed to submit answer");
     } finally {
       setBusy(false);
     }
   }
 
-  const sprite =
-    poke?.sprites.other?.["official-artwork"]?.front_default ??
-    poke?.sprites.front_default ??
-    null;
+  function onCorrect() {
+    if (lock) return;
+
+    setErr("");
+    setLock({
+      reason: "CORRECT",
+      title: "I GOT IT! 🎉",
+      subtitle: "Nice! You can start a new game now.",
+    });
+    setConfetti(makeConfetti(130));
+    window.setTimeout(() => setConfetti([]), 1900);
+  }
+
+  async function onWrongTryNext() {
+    // Wrong => answer NO and let backend pick another candidate/flow
+    await onAnswer("NO");
+  }
+
+  const showOnlyNewGame = lock !== null;
 
   return (
-    <div
-      style={{
-        maxWidth: 860,
-        margin: "40px auto",
-        padding: 16,
-        fontFamily: "system-ui, Arial",
-        color: "#eee",
-      }}
-    >
-      <h1 style={{ margin: 0 }}>Pokenator</h1>
-
-      <div style={{ marginTop: 8, opacity: 0.75, fontSize: 12 }}>
-        session: <code>{sessionId || "..."}</code>
-        {remaining !== null && (
-          <>
-            {" "}
-            | candidates: <code>{remaining}</code>
-          </>
-        )}
-      </div>
-
-      {err && (
-        <div
-          style={{
-            marginTop: 12,
-            padding: 12,
-            border: "1px solid #ff4d4d",
-            borderRadius: 10,
-            background: "rgba(255,77,77,0.08)",
-          }}
-        >
-          <b>Erro:</b> {err}
+    <div className="page">
+      {confetti.length > 0 && (
+        <div style={{ position: "fixed", inset: 0, pointerEvents: "none", overflow: "hidden", zIndex: 9999 }}>
+          {confetti.map((c) => (
+            <span
+              key={c.id}
+              style={{
+                position: "absolute",
+                left: `${c.leftPct}%`,
+                top: "-22px",
+                width: `${c.size}px`,
+                height: `${c.size * 0.64}px`,
+                background: `hsl(${c.hue} 92% 60%)`,
+                borderRadius: 2,
+                opacity: 0.95,
+                transform: `rotate(${c.rotateDeg}deg)`,
+                animation: `confetti-fall ${c.durationMs}ms cubic-bezier(.21,.61,.2,1) ${c.delayMs}ms forwards`,
+                ["--drift" as any]: `${c.driftPx}px`,
+              }}
+            />
+          ))}
+          <style>{`
+            @keyframes confetti-fall {
+              0% { transform: translate(0px, 0px) rotate(0deg); opacity: 1; }
+              100% { transform: translate(var(--drift, 0px), 112vh) rotate(780deg); opacity: 0; }
+            }
+          `}</style>
         </div>
       )}
 
-      {!guess && (
-        <div
-          style={{
-            marginTop: 18,
-            padding: 16,
-            border: "1px solid #333",
-            borderRadius: 14,
-            background: "rgba(255,255,255,0.03)",
-          }}
-        >
-          <h2 style={{ marginTop: 0 }}>Pergunta</h2>
-          <p style={{ fontSize: 18, marginBottom: 12 }}>{questionText}</p>
+      <div className="topBar">
+        <div style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
+          <PokeballMark />
+          <div>
+            <h1 className="title">POKENATOR</h1>
+            <div className="subtitle">Game Boy-style guessing • Pokéball vibes</div>
+          </div>
+        </div>
 
-          <div style={{ display: "flex", gap: 10, marginTop: 12, flexWrap: "wrap" }}>
-            <button disabled={busy} onClick={() => onAnswer("YES")}>
-              Sim
-            </button>
-            <button disabled={busy} onClick={() => onAnswer("NO")}>
-              Não
-            </button>
-            <button disabled={busy} onClick={() => onAnswer("UNKNOWN")}>
-              Não sei
-            </button>
-            <button disabled={busy} onClick={init} style={{ marginLeft: "auto" }}>
-              Reiniciar
-            </button>
+        <div className="badges">
+          <span className="badge">
+            ID <code>{sessionId || "..."}</code>
+          </span>
+          {remaining !== null && (
+            <span className="badge">
+              LEFT <code>{remaining}</code>
+            </span>
+          )}
+        </div>
+      </div>
+
+      {err && (
+        <div className="toast">
+          <b>Error:</b> {err}
+        </div>
+      )}
+
+      {/* QUESTION MODE */}
+      {!guess && (
+        <div className="card" style={{ marginTop: 18 }}>
+          <div className="cardInner">
+            <div className="row" style={{ justifyContent: "space-between" }}>
+              <div className="arrow">▶ QUESTION</div>
+              <div className="small">Answer honestly 😄</div>
+            </div>
+
+            <div className="hr" />
+
+            <p className="bigQ">{questionText}</p>
+
+            <div className="row" style={{ marginTop: 16 }}>
+              <button className="btn-yes" disabled={busy || !!lock} onClick={() => onAnswer("YES")}>
+                YES
+              </button>
+              <button className="btn-no" disabled={busy || !!lock} onClick={() => onAnswer("NO")}>
+                NO
+              </button>
+              <button className="btn-unk" disabled={busy || !!lock} onClick={() => onAnswer("UNKNOWN")}>
+                I DON'T KNOW
+              </button>
+
+              <div style={{ flex: 1 }} />
+
+              <button className="btn-ghost" disabled={busy} onClick={init}>
+                RESET
+              </button>
+            </div>
+
+            <div className="small" style={{ marginTop: 10, opacity: 0.9 }}>
+              Tip: “I DON'T KNOW” helps when you're unsure.
+            </div>
           </div>
         </div>
       )}
 
+      {/* GUESS MODE */}
       {guess && (
-        <div
-          style={{
-            marginTop: 18,
-            padding: 16,
-            border: "1px solid #333",
-            borderRadius: 14,
-            background: "rgba(255,255,255,0.03)",
-          }}
-        >
-          <h2 style={{ marginTop: 0 }}>Meu palpite</h2>
-
-          <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
-            <div style={{ width: 180 }}>
-              {sprite ? (
-                <img
-                  src={sprite}
-                  width={180}
-                  height={180}
-                  alt={poke?.name ?? guess.label}
-                  style={{ objectFit: "contain" }}
-                />
-              ) : (
-                <div style={{ width: 180, height: 180, display: "grid", placeItems: "center" }}>
-                  Sem imagem
-                </div>
-              )}
+        <div className="card" style={{ marginTop: 18 }}>
+          <div className="cardInner">
+            <div className="row" style={{ justifyContent: "space-between" }}>
+              <div className="arrow">▶ GUESS</div>
+              <div className="small">Did I get it right?</div>
             </div>
 
-            <div style={{ flex: 1, minWidth: 260 }}>
-              <div style={{ fontSize: 22, fontWeight: 800 }}>{guess.label}</div>
-              {guess.uri && (
-                <div style={{ marginTop: 6, opacity: 0.8, fontSize: 12 }}>
-                  uri: <code>{guess.uri}</code>
-                </div>
-              )}
+            <div className="hr" />
 
-              {poke && (
-                <div style={{ marginTop: 10, lineHeight: 1.6 }}>
-                  <div>
-                    <b>ID:</b> {poke.id}
-                  </div>
-                  <div>
-                    <b>Tipos:</b> {poke.types.map((t) => t.type.name).join(", ")}
-                  </div>
-                  <div>
-                    <b>Altura:</b> {poke.height / 10} m
-                  </div>
-                  <div>
-                    <b>Peso:</b> {poke.weight / 10} kg
-                  </div>
-                </div>
-              )}
+            <div className="row" style={{ alignItems: "flex-start", gap: 16 }}>
+              <div className="pokeFrame">
+                {sprite ? <img src={sprite} alt={poke?.name ?? guess.label} /> : <div className="small">Loading Pokémon...</div>}
+              </div>
 
-              <div style={{ display: "flex", gap: 10, marginTop: 14, flexWrap: "wrap" }}>
-                <button disabled={busy} onClick={() => onAnswer("YES")}>
-                  Acertou ✅
-                </button>
-                <button disabled={busy} onClick={() => onAnswer("NO")}>
-                  Errou ❌
-                </button>
-                <button disabled={busy} onClick={init} style={{ marginLeft: "auto" }}>
-                  Novo jogo
-                </button>
+              <div className="stack" style={{ flex: 1 }}>
+                <div style={{ display: "grid", gap: 8 }}>
+                  <div style={{ fontFamily: "var(--font-pixel)", fontSize: 16, lineHeight: 1.4 }}>
+                    {guess.label.toUpperCase()}
+                  </div>
+
+                  {guess.uri && (
+                    <div className="small">
+                      uri: <code>{guess.uri}</code>
+                    </div>
+                  )}
+
+                  {poke && (
+                    <div className="row" style={{ gap: 10, flexWrap: "wrap" }}>
+                      <span className="badge">
+                        # <code>{poke.id}</code>
+                      </span>
+                      <span className="badge">
+                        TYPE <code>{poke.types.map((t) => t.type.name.toUpperCase()).join(", ")}</code>
+                      </span>
+                      <span className="badge">
+                        HT <code>{(poke.height / 10).toFixed(1)}m</code>
+                      </span>
+                      <span className="badge">
+                        WT <code>{(poke.weight / 10).toFixed(1)}kg</code>
+                      </span>
+                    </div>
+                  )}
+                </div>
+
+                {lock && (
+                  <div
+                    style={{
+                      padding: 14,
+                      borderRadius: 12,
+                      border: "4px solid #111",
+                      background:
+                        lock.reason === "CORRECT"
+                          ? "rgba(185,255,203,0.85)"
+                          : "rgba(255,193,189,0.85)",
+                      boxShadow: "6px 6px 0 rgba(0,0,0,0.65)",
+                      fontFamily: "var(--font-pixel)",
+                      fontSize: 12,
+                      lineHeight: 1.4,
+                    }}
+                  >
+                    <div style={{ fontSize: 14, marginBottom: 6 }}>{lock.title}</div>
+                    <div>{lock.subtitle}</div>
+                  </div>
+                )}
+
+                <div className="row" style={{ marginTop: 10 }}>
+                  {!showOnlyNewGame ? (
+                    <>
+                      <button className="btn-primary" disabled={busy} onClick={onCorrect}>
+                        CORRECT
+                      </button>
+                      <button className="btn-ghost" disabled={busy} onClick={onWrongTryNext}>
+                        WRONG
+                      </button>
+                      <div style={{ flex: 1 }} />
+                      <button className="btn-ghost" disabled={busy} onClick={init}>
+                        NEW GAME
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <div className="small">Actions locked — only NEW GAME is available.</div>
+                      <div style={{ flex: 1 }} />
+                      <button className="btn-primary" disabled={busy} onClick={init}>
+                        NEW GAME
+                      </button>
+                    </>
+                  )}
+                </div>
               </div>
             </div>
           </div>

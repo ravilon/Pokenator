@@ -1,23 +1,288 @@
-:root {
+:root{
   color-scheme: dark;
+
+  /* Pokébola palette */
+  --poke-red: #e3352b;
+  --poke-white: #f7f7f7;
+  --poke-black: #111111;
+  --poke-dark: #0b0b0b;
+  --poke-gray: #2a2a2a;
+
+  /* GameBoy-ish UI */
+  --screen-ink: #0d0d0d;
+  --screen-paper: #f7f7f7;
+
+  --border: #0b0b0b;
+  --border-soft: rgba(0,0,0,0.22);
+  --shadow-hard: 6px 6px 0 rgba(0,0,0,0.65);
+  --shadow-soft: 0 12px 30px rgba(0,0,0,0.35);
+
+  --muted: rgba(0,0,0,0.62);
+  --muted2: rgba(0,0,0,0.42);
+
+  --radius: 14px;
+
+  /* Typography */
+  --font-pixel: "Press Start 2P", system-ui, Arial, sans-serif;
+  --font-ui: Inter, system-ui, Arial, sans-serif;
 }
 
-html, body {
-  margin: 0;
-  padding: 0;
-  background: #1f1f1f;
+*{ box-sizing:border-box; }
+
+html, body{
+  margin:0;
+  padding:0;
+  height:100%;
+  background:
+    /* Pokébola vibe (top red / middle black band / bottom white) */
+    linear-gradient(
+      180deg,
+      var(--poke-red) 0%,
+      var(--poke-red) 42%,
+      var(--poke-black) 42%,
+      var(--poke-black) 48%,
+      var(--poke-white) 48%,
+      var(--poke-white) 100%
+    );
+  color: var(--screen-ink);
+  font-family: var(--font-ui);
 }
 
-button {
-  padding: 10px 14px;
+/* subtle scanlines (Game Boy feel) */
+body::before{
+  content:"";
+  position:fixed;
+  inset:0;
+  pointer-events:none;
+  background:
+    repeating-linear-gradient(
+      0deg,
+      rgba(0,0,0,0.05),
+      rgba(0,0,0,0.05) 1px,
+      rgba(255,255,255,0) 3px,
+      rgba(255,255,255,0) 6px
+    );
+  opacity:0.18;
+  mix-blend-mode:multiply;
+}
+
+/* dotted texture overlay */
+body::after{
+  content:"";
+  position:fixed;
+  inset:0;
+  pointer-events:none;
+  background-image: radial-gradient(rgba(0,0,0,0.06) 1px, transparent 1px);
+  background-size: 10px 10px;
+  opacity:0.25;
+  mix-blend-mode:multiply;
+}
+
+a{ color:inherit; }
+
+code{
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  padding: 2px 6px;
   border-radius: 10px;
-  border: 1px solid #333;
-  background: #111;
-  color: #eee;
-  cursor: pointer;
+  background: rgba(0,0,0,0.06);
+  border: 2px solid rgba(0,0,0,0.12);
 }
 
-button:disabled {
+/* Pixel-ish button */
+button{
+  appearance:none;
+  border: 3px solid var(--border);
+  background: var(--screen-paper);
+  color: var(--screen-ink);
+  padding: 12px 14px;
+  border-radius: 12px;
+  cursor: pointer;
+  font-family: var(--font-pixel);
+  font-size: 12px;
+  line-height: 1.1;
+  letter-spacing: 0.2px;
+  box-shadow: var(--shadow-hard);
+  transform: translate(0,0);
+  transition: transform 80ms ease, box-shadow 80ms ease, filter 80ms ease;
+}
+
+button:hover{
+  filter: brightness(1.02);
+  transform: translate(-1px, -1px);
+  box-shadow: 7px 7px 0 rgba(0,0,0,0.65);
+}
+
+button:active{
+  transform: translate(2px,2px);
+  box-shadow: 4px 4px 0 rgba(0,0,0,0.65);
+}
+
+button:disabled{
   opacity: 0.6;
   cursor: not-allowed;
+  transform:none;
+  box-shadow: 4px 4px 0 rgba(0,0,0,0.55);
+}
+
+.btn-yes{
+  background: #b9ffcb;
+}
+
+.btn-no{
+  background: #ffc1bd;
+}
+
+.btn-unk{
+  background: #ffe7b3;
+}
+
+.btn-primary{
+  background: #cfe3ff;
+}
+
+.btn-ghost{
+  background: #f1f1f1;
+}
+
+/* Game Boy dialog card */
+.card{
+  background: var(--screen-paper);
+  border: 4px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-hard), var(--shadow-soft);
+  padding: 18px;
+}
+
+/* “PokéStop / menu box” vibe: inner dotted border */
+.cardInner{
+  border: 3px dashed rgba(0,0,0,0.35);
+  border-radius: 12px;
+  padding: 14px;
+  background: rgba(255,255,255,0.65);
+}
+
+/* Header bar resembling pokeball band */
+.topBar{
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap: 14px;
+
+  background: rgba(255,255,255,0.78);
+  border: 4px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  box-shadow: var(--shadow-hard);
+}
+
+.title{
+  font-family: var(--font-pixel);
+  font-size: 18px;
+  line-height: 1.2;
+  margin:0;
+}
+
+.subtitle{
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.badges{
+  display:flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content:flex-end;
+}
+
+.badge{
+  display:inline-flex;
+  align-items:center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 999px;
+  border: 3px solid var(--border);
+  background: rgba(255,255,255,0.88);
+  box-shadow: 4px 4px 0 rgba(0,0,0,0.55);
+  font-family: var(--font-pixel);
+  font-size: 10px;
+  line-height: 1.1;
+}
+
+/* big question text like GB dialog */
+.bigQ{
+  font-family: var(--font-pixel);
+  font-size: 14px;
+  line-height: 1.55;
+  margin:0;
+}
+
+.small{
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.row{
+  display:flex;
+  gap: 12px;
+  align-items:center;
+  flex-wrap: wrap;
+}
+
+.stack{
+  display:grid;
+  gap: 12px;
+}
+
+.hr{
+  height: 4px;
+  background: rgba(0,0,0,0.10);
+  border-radius: 99px;
+  margin: 12px 0;
+}
+
+/* Pixel frame for Pokemon art */
+.pokeFrame{
+  width: 220px;
+  height: 220px;
+  border-radius: 16px;
+  border: 4px solid var(--border);
+  background:
+    radial-gradient(120px 120px at 30% 25%, rgba(0,0,0,0.08), transparent 60%),
+    linear-gradient(180deg, rgba(227,53,43,0.12), rgba(0,0,0,0.00));
+  box-shadow: var(--shadow-hard);
+  display:grid;
+  place-items:center;
+  overflow:hidden;
+}
+
+.pokeFrame img{
+  width: 220px;
+  height: 220px;
+  object-fit: contain;
+}
+
+/* Alert box */
+.toast{
+  margin-top: 14px;
+  padding: 14px;
+  border-radius: 14px;
+  border: 4px solid var(--border);
+  background: rgba(255, 193, 189, 0.65);
+  box-shadow: var(--shadow-hard);
+  font-family: var(--font-ui);
+}
+
+/* Arrow indicator like old menus */
+.arrow{
+  font-family: var(--font-pixel);
+  font-size: 12px;
+  color: rgba(0,0,0,0.7);
+}
+
+/* Page container */
+.page{
+  max-width: 980px;
+  margin: 28px auto;
+  padding: 16px;
 }
