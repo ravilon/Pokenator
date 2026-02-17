@@ -12,6 +12,14 @@ export type StartResponse = {
   question: ApiQuestion;
 };
 
+export type Candidate = { 
+  uri: string; label: string 
+};
+
+export type CandidateResponse = { 
+  candidates: Candidate[] 
+};
+
 export type StepResponse =
   | {
       kind: "QUESTION";
@@ -65,5 +73,13 @@ export function answerGame(sessionId: string, answer: Answer): Promise<StepRespo
       Accept: "application/json",
     },
     body: JSON.stringify({ answer }),
+  });
+}
+
+// Nova função de API para listar candidatos
+export function getCandidates(sessionId: string): Promise<CandidateResponse> {
+  return http<CandidateResponse>(`/api/game/${encodeURIComponent(sessionId)}/candidates`, {
+    method: "GET",
+    headers: { Accept: "application/json" },
   });
 }

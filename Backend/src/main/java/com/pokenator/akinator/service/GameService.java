@@ -160,6 +160,11 @@ public class GameService {
         );
     }
 
+    // dentro de GameService
+    public GameState getState(String sessionId) {
+        return sessions.get(sessionId);
+    }
+
     public record StartGameResult(String sessionId, Question question) {}
 
     public sealed interface NextStepResult

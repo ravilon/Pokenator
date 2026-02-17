@@ -1,11 +1,18 @@
 package com.pokenator.api;
 
+import com.pokenator.akinator.model.GameState;
 import com.pokenator.akinator.service.GameService;
 import com.pokenator.api.dto.AnswerRequest;
 import com.pokenator.api.dto.ApiQuestion;
+import com.pokenator.api.dto.CandidateDto;
+import com.pokenator.api.dto.CandidateListResponse;
 import com.pokenator.api.dto.GameStartResponse;
 import com.pokenator.api.dto.GameStepResponse;
 import com.pokenator.repository.SpeciesRepository;
+
+import java.util.ArrayList;
+import java.util.List;
+
 import org.apache.jena.query.Dataset;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
@@ -24,6 +31,19 @@ public class GameController {
         this.speciesRepository = speciesRepository;
         this.dataset = dataset;
     }
+
+    @GetMapping("/game/{sessionId}/candidates")
+    public CandidateListResponse listCandidates(@PathVariable String sessionId) {
+        GameState state = gameService.getState(sessionId);
+        List<String> uris = speciesRepository.listCandidates(dataset, state.getConstraints(), 1000);
+        List<CandidateDto> list = new ArrayList<>();
+        for (String uri : uris) {
+            String label = speciesRepository.getEnglishLabel(dataset, uri);
+            list.add(new CandidateDto(uri, label));
+        }
+        return new CandidateListResponse(list);
+    }
+
 
     @GetMapping("/health")
     public String health() {

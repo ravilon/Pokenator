@@ -2,6 +2,9 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { Answer, StartResponse, StepResponse } from "./api/backend";
 import { answerGame, startGame } from "./api/backend";
 import { fetchPokemon, toPokeApiSlug, type PokeApiPokemon } from "./api/pokeapi";
+import { getCandidates, type Candidate } from "./api/backend";
+import PointCloud from "./components/PointCloud";
+
 
 type UiGuess = {
   label: string;
@@ -80,6 +83,8 @@ export default function App() {
   const [sessionId, setSessionId] = useState("");
   const [questionText, setQuestionText] = useState("Loading...");
   const [remaining, setRemaining] = useState<number | null>(null);
+  const [candidates, setCandidates] = useState<Candidate[]>([]);
+
 
   const [guess, setGuess] = useState<UiGuess | null>(null);
   const [poke, setPoke] = useState<PokeApiPokemon | null>(null);
@@ -147,6 +152,8 @@ export default function App() {
       setSessionId(start.sessionId);
       setQuestionText(start.question.text);
       setRemaining(null);
+      const candRes = await getCandidates(start.sessionId);
+      setCandidates(candRes.candidates);
     } catch (e: any) {
       setErr(e?.message ?? "Failed to start game");
     } finally {
@@ -225,6 +232,9 @@ export default function App() {
 
       setQuestionText(step.question.text);
       if (rem !== null) setRemaining(rem);
+
+      const candRes = await getCandidates(sessionId);
+      setCandidates(candRes.candidates);
       return;
     }
 
@@ -478,6 +488,19 @@ export default function App() {
           </div>
         </div>
       )}
+      {candidates.length > 0 && (
+        <div className="card" style={{ marginTop: 18 }}>
+          <div className="cardInner">
+            <div className="row" style={{ justifyContent: "space-between" }}>
+              <div className="arrow">▶ CANDIDATES</div>
+              <div className="small">Possible species</div>
+            </div>
+            <div className="hr" />
+            <PointCloud candidates={candidates} />
+          </div>
+        </div>
+      )}
     </div>
+    
   );
 }
