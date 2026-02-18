@@ -1,0 +1,510 @@
+{
+  "info": {
+    "_postman_id": "b3fc3f22-e506-4b67-8fc4-9ddc80c45869",
+    "name": "Pokenator API",
+    "description": "Testes da API do Pokenator (Spring Boot) - health, start game, candidates, answer (YES/NO/UNKNOWN). Atualizado para o formato atual do GameStepResponse: kind/remainingCandidates/question/guessUri/guessLabel.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_exporter_id": "35944251"
+  },
+  "item": [
+    {
+      "name": "Health",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status is 200', function () {",
+              "  pm.response.to.have.status(200);",
+              "});",
+              "",
+              "// Se seu health retorna \"ok\" (string pura), este teste valida isso.",
+              "pm.test('Body is ok (string) or has ok field', function () {",
+              "  const ct = pm.response.headers.get('Content-Type') || '';",
+              "  const raw = pm.response.text();",
+              "  if (ct.includes('application/json')) {",
+              "    try {",
+              "      const json = pm.response.json();",
+              "      if (typeof json === 'string') {",
+              "        pm.expect(json.toLowerCase()).to.eql('ok');",
+              "      } else if (json && typeof json === 'object') {",
+              "        // aceita {\"status\":\"ok\"} ou {\"message\":\"ok\"}",
+              "        const v = (json.status || json.message || '').toString().toLowerCase();",
+              "        pm.expect(v).to.eql('ok');",
+              "      } else {",
+              "        pm.expect.fail('Resposta JSON inesperada no /health');",
+              "      }",
+              "    } catch (e) {",
+              "      // fallback: pode ser texto mesmo",
+              "      pm.expect(raw.toLowerCase()).to.include('ok');",
+              "    }",
+              "  } else {",
+              "    pm.expect(raw.toLowerCase()).to.include('ok');",
+              "  }",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/health",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "health"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Game - Start",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status is 200', function () {",
+              "  pm.response.to.have.status(200);",
+              "});",
+              "",
+              "pm.test('Response has sessionId and question', function () {",
+              "  const json = pm.response.json();",
+              "  pm.expect(json).to.be.an('object');",
+              "  pm.expect(json).to.have.property('sessionId');",
+              "  pm.expect(json.sessionId).to.be.a('string').and.not.empty;",
+              "  pm.expect(json).to.have.property('question');",
+              "  pm.expect(json.question).to.be.an('object');",
+              "  pm.expect(json.question).to.have.property('text');",
+              "});",
+              "",
+              "// Salva sessionId para as próximas requests",
+              "const json = pm.response.json();",
+              "pm.collectionVariables.set('sessionId', json.sessionId);",
+              "",
+              "// Opcional: salva ultima pergunta (debug)",
+              "try {",
+              "  pm.collectionVariables.set('lastQuestionText', json.question?.text || '');",
+              "} catch (e) {}"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/game/start",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "game",
+            "start"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Game - Candidates",
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "if (!pm.collectionVariables.get('sessionId')) {",
+              "  throw new Error('sessionId não definido. Rode primeiro: Game - Start');",
+              "}"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status is 200', function () {",
+              "  pm.response.to.have.status(200);",
+              "});",
+              "",
+              "pm.test('Response has candidates array', function () {",
+              "  const json = pm.response.json();",
+              "  pm.expect(json).to.be.an('object');",
+              "  pm.expect(json).to.have.property('candidates');",
+              "  pm.expect(json.candidates).to.be.an('array');",
+              "  if (json.candidates.length > 0) {",
+              "    pm.expect(json.candidates[0]).to.have.property('uri');",
+              "    pm.expect(json.candidates[0]).to.have.property('label');",
+              "  }",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/game/{{sessionId}}/candidates",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "game",
+            "{{sessionId}}",
+            "candidates"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Game - Answer YES",
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "exec": [
+              "if (!pm.collectionVariables.get('sessionId')) {",
+              "  throw new Error('sessionId não definido. Rode primeiro: Game - Start');",
+              "}"
+            ],
+            "type": "text/javascript",
+            "packages": {},
+            "requests": {}
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status is 200', function () {",
+              "  pm.response.to.have.status(200);",
+              "});",
+              "",
+              "pm.test('Response matches GameStepResponse (kind/remainingCandidates/question/guessUri/guessLabel)', function () {",
+              "  const json = pm.response.json();",
+              "  pm.expect(json).to.be.an('object');",
+              "  pm.expect(json).to.have.property('kind');",
+              "  pm.expect(['QUESTION','GUESS','NO_CANDIDATES']).to.include((json.kind || '').toString().toUpperCase());",
+              "",
+              "  const kind = (json.kind || '').toString().toUpperCase();",
+              "  if (kind === 'QUESTION') {",
+              "    pm.expect(json).to.have.property('question');",
+              "    pm.expect(json.question).to.be.an('object');",
+              "    pm.expect(json.question).to.have.property('text');",
+              "    // remainingCandidates pode ser null ou number",
+              "    if (json.remainingCandidates !== null && json.remainingCandidates !== undefined) {",
+              "      pm.expect(json.remainingCandidates).to.be.a('number');",
+              "    }",
+              "  }",
+              "  if (kind === 'GUESS') {",
+              "    pm.expect(json).to.have.property('guessUri');",
+              "    pm.expect(json).to.have.property('guessLabel');",
+              "    pm.expect(json.guessLabel).to.be.a('string').and.not.empty;",
+              "  }",
+              "  if (kind === 'NO_CANDIDATES') {",
+              "    // nada extra obrigatório",
+              "  }",
+              "});",
+              "",
+              "// Guarda última pergunta para debug",
+              "try {",
+              "  const json = pm.response.json();",
+              "  if (json.kind && json.kind.toString().toUpperCase() === 'QUESTION' && json.question) {",
+              "    pm.collectionVariables.set('lastQuestionText', json.question.text || '');",
+              "  }",
+              "} catch (e) {}"
+            ],
+            "type": "text/javascript",
+            "packages": {},
+            "requests": {}
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"answer\": \"YES\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/game/{{sessionId}}/answer",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "game",
+            "{{sessionId}}",
+            "answer"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Game - Answer NO",
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "if (!pm.collectionVariables.get('sessionId')) {",
+              "  throw new Error('sessionId não definido. Rode primeiro: Game - Start');",
+              "}"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status is 200', function () {",
+              "  pm.response.to.have.status(200);",
+              "});",
+              "",
+              "pm.test('Response matches GameStepResponse (kind/remainingCandidates/question/guessUri/guessLabel)', function () {",
+              "  const json = pm.response.json();",
+              "  pm.expect(json).to.be.an('object');",
+              "  pm.expect(json).to.have.property('kind');",
+              "  pm.expect(['QUESTION','GUESS','NO_CANDIDATES']).to.include((json.kind || '').toString().toUpperCase());",
+              "",
+              "  const kind = (json.kind || '').toString().toUpperCase();",
+              "  if (kind === 'QUESTION') {",
+              "    pm.expect(json).to.have.property('question');",
+              "    pm.expect(json.question).to.be.an('object');",
+              "    pm.expect(json.question).to.have.property('text');",
+              "    // remainingCandidates pode ser null ou number",
+              "    if (json.remainingCandidates !== null && json.remainingCandidates !== undefined) {",
+              "      pm.expect(json.remainingCandidates).to.be.a('number');",
+              "    }",
+              "  }",
+              "  if (kind === 'GUESS') {",
+              "    pm.expect(json).to.have.property('guessUri');",
+              "    pm.expect(json).to.have.property('guessLabel');",
+              "    pm.expect(json.guessLabel).to.be.a('string').and.not.empty;",
+              "  }",
+              "  if (kind === 'NO_CANDIDATES') {",
+              "    // nada extra obrigatório",
+              "  }",
+              "});",
+              "",
+              "// Guarda última pergunta para debug",
+              "try {",
+              "  const json = pm.response.json();",
+              "  if (json.kind && json.kind.toString().toUpperCase() === 'QUESTION' && json.question) {",
+              "    pm.collectionVariables.set('lastQuestionText', json.question.text || '');",
+              "  }",
+              "} catch (e) {}"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"answer\": \"NO\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/game/{{sessionId}}/answer",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "game",
+            "{{sessionId}}",
+            "answer"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Game - Answer UNKNOWN",
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "if (!pm.collectionVariables.get('sessionId')) {",
+              "  throw new Error('sessionId não definido. Rode primeiro: Game - Start');",
+              "}"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status is 200', function () {",
+              "  pm.response.to.have.status(200);",
+              "});",
+              "",
+              "pm.test('Response matches GameStepResponse (kind/remainingCandidates/question/guessUri/guessLabel)', function () {",
+              "  const json = pm.response.json();",
+              "  pm.expect(json).to.be.an('object');",
+              "  pm.expect(json).to.have.property('kind');",
+              "  pm.expect(['QUESTION','GUESS','NO_CANDIDATES']).to.include((json.kind || '').toString().toUpperCase());",
+              "",
+              "  const kind = (json.kind || '').toString().toUpperCase();",
+              "  if (kind === 'QUESTION') {",
+              "    pm.expect(json).to.have.property('question');",
+              "    pm.expect(json.question).to.be.an('object');",
+              "    pm.expect(json.question).to.have.property('text');",
+              "    // remainingCandidates pode ser null ou number",
+              "    if (json.remainingCandidates !== null && json.remainingCandidates !== undefined) {",
+              "      pm.expect(json.remainingCandidates).to.be.a('number');",
+              "    }",
+              "  }",
+              "  if (kind === 'GUESS') {",
+              "    pm.expect(json).to.have.property('guessUri');",
+              "    pm.expect(json).to.have.property('guessLabel');",
+              "    pm.expect(json.guessLabel).to.be.a('string').and.not.empty;",
+              "  }",
+              "  if (kind === 'NO_CANDIDATES') {",
+              "    // nada extra obrigatório",
+              "  }",
+              "});",
+              "",
+              "// Guarda última pergunta para debug",
+              "try {",
+              "  const json = pm.response.json();",
+              "  if (json.kind && json.kind.toString().toUpperCase() === 'QUESTION' && json.question) {",
+              "    pm.collectionVariables.set('lastQuestionText', json.question.text || '');",
+              "  }",
+              "} catch (e) {}"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"answer\": \"UNKNOWN\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/game/{{sessionId}}/answer",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "game",
+            "{{sessionId}}",
+            "answer"
+          ]
+        }
+      },
+      "response": []
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8080",
+      "type": "string"
+    },
+    {
+      "key": "sessionId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "lastQuestionText",
+      "value": "",
+      "type": "string"
+    }
+  ]
+}
